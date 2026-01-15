@@ -1,23 +1,25 @@
-import kotlin.system.*
-import kotlinx.coroutines.*
+package com.example.poketgc_api
 
-fun main() {
-    val time = measureTimeMillis {
-        runBlocking {
-            println("Weather forecast")
-            printForecast()
-            printTemperature()
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import com.example.poketgc_api.ui.theme.Pantalla.PokemonPantalla
+import com.example.poketgc_api.ui.theme.PokeTGC_APITheme
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            PokeTGC_APITheme {
+                // A surface container using the 'background' color from the theme
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    PokemonPantalla()
+                }
+            }
         }
     }
-    println("Execution time: ${time / 1000.0} seconds")
-}
-
-suspend fun printForecast() {
-    delay(1000)
-    println("Sunny")
-}
-
-suspend fun printTemperature() {
-    delay(1000)
-    println("30\u00b0C")
 }
