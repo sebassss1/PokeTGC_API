@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.poketgc_api.Data.PokemonCard
 import com.example.poketgc_api.Data.TcgDexApi
@@ -100,10 +101,10 @@ fun PokemonApp() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("PokeTGC API") },
+                title = { Text("PokeTGC API", color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
+                    containerColor = Color(0xFF4CAF50), // Verde esmeralda (Material Green 500)
+                    actionIconContentColor = Color.White
                 ),
                 actions = {
                     // Indicador visual de ordenamiento intuitivo
@@ -114,7 +115,7 @@ fun PokemonApp() {
                         Text(
                             text = if (isAscending) "Antiguos" else "Recientes",
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color.White
                         )
                         IconButton(onClick = { isAscending = !isAscending }) {
                             Icon(
@@ -122,7 +123,8 @@ fun PokemonApp() {
                                     Icons.Default.ArrowUpward 
                                 else 
                                     Icons.Default.ArrowDownward,
-                                contentDescription = "Cambiar orden"
+                                contentDescription = "Cambiar orden",
+                                tint = Color.White
                             )
                         }
                     }
@@ -134,7 +136,7 @@ fun PokemonApp() {
             .fillMaxSize()
             .padding(innerPadding)) {
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color(0xFF4CAF50))
             } else if (errorMessage != null) {
                 Text(
                     text = "Error: $errorMessage",
