@@ -49,6 +49,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     
+    // Material Icons Extended
+    implementation("androidx.compose.material:material-icons-extended")
+    
     // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
 
@@ -63,8 +66,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    // Note: This artifact was causing issues because it was not found in default repositories.
-    // Adding jitpack to settings.gradle.kts might help, but using Retrofit directly is often preferred.
-    // implementation("net.tcgdex:java-sdk:1.1.1")
 }
