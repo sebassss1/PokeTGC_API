@@ -5,13 +5,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -73,7 +75,8 @@ fun PokemonApp() {
 
     LaunchedEffect(Unit) {
         try {
-            cards = api.getAllCard().take(60) // Tomamos más para filtrar y que sigan quedando bastantes
+            // Cargamos bastantes para que el filtrado y ordenado sea interesante
+            cards = api.getAllCard().take(100)
             isLoading = false
         } catch (e: Exception) {
             errorMessage = e.message
@@ -83,7 +86,6 @@ fun PokemonApp() {
 
     // Lógica de filtrado y ordenación
     val sortedCards = remember(cards, isAscending) {
-        // Filtramos las cartas que no tienen imagen o que se llaman "Unown"
         val filtered = cards.filter { 
             !it.imagen.isNullOrEmpty() && it.nombre != "Unown" 
         }
@@ -104,11 +106,25 @@ fun PokemonApp() {
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 actions = {
-                    IconButton(onClick = { isAscending = !isAscending }) {
-                        Icon(
-                            imageVector = Icons.Default.Sort,
-                            contentDescription = "Ordenar"
+                    // Indicador visual de ordenamiento intuitivo
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text(
+                            text = if (isAscending) "Antiguos" else "Recientes",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
                         )
+                        IconButton(onClick = { isAscending = !isAscending }) {
+                            Icon(
+                                imageVector = if (isAscending) 
+                                    Icons.Default.ArrowUpward 
+                                else 
+                                    Icons.Default.ArrowDownward,
+                                contentDescription = "Cambiar orden"
+                            )
+                        }
                     }
                 }
             )
