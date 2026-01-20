@@ -9,5 +9,6 @@ data class PokemonCard(
     val nombre: String?,
     @SerializedName("image")
     val imagen: String?,
-    val rarity: String?
+    val rarity: String?,
+    val types: List<String>?
 )
