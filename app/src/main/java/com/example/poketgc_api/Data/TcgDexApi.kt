@@ -5,10 +5,10 @@ import retrofit2.http.Path
 
 interface TcgDexApi {
     @GET("en/cards")
-    suspend fun getAllCard(): List<PokemonCard>
+    suspend fun getAllCard(): List<PokeCard>
 
     @GET("en/cards/{id}")
     suspend fun getCardById(
         @Path("id") id: String
-    ): PokemonCard
+    ): PokeCard
 }

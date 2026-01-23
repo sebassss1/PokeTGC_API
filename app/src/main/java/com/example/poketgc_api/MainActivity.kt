@@ -31,12 +31,12 @@ import retrofit2.converter.gson.GsonConverterFactory
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val settingsManager = SettingsManager(this)
+        val managerAjustes = ManagerAjustes(this)
         val database = AppDatabase.getDatabase(this)
         val dao = database.pokemonDao()
 
         setContent {
-            val isDarkMode by settingsManager.isDarkMode.collectAsState(initial = false)
+            val isDarkMode by managerAjustes.isDarkMode.collectAsState(initial = false)
             val scope = rememberCoroutineScope()
 
             PokeTGC_APITheme(darkTheme = isDarkMode) {
@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
                     PokemonApp(
                         isDarkMode = isDarkMode,
                         onDarkModeToggle = { enabled ->
-                            scope.launch { settingsManager.setDarkMode(enabled) }
+                            scope.launch { managerAjustes.setDarkMode(enabled) }
                         },
                         dao = dao
                     )
@@ -64,13 +64,13 @@ enum class Screen {
 // Clase para representar la lista en la UI con sus cartas cargadas
 class UserListUI(
     val entity: UsuarioEntidadLista,
-    val cards: MutableList<PokemonCard> = mutableStateListOf()
+    val cards: MutableList<PokeCard> = mutableStateListOf()
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: PokemonDAO) {
-    var cards by remember { mutableStateOf<List<PokemonCard>>(emptyList()) }
+    var cards by remember { mutableStateOf<List<PokeCard>>(emptyList()) }
 
     // Listas cargadas desde Room
     val userLists = remember { mutableStateListOf<UserListUI>() }
@@ -124,7 +124,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                     dao.getCardsForList(entity.id).collect { cardEntities ->
                         uiList.cards.clear()
                         uiList.cards.addAll(cardEntities.map {
-                            PokemonCard(
+                            PokeCard(
                                 it.cardId,
                                 it.localId,
                                 it.nombre,
@@ -372,7 +372,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                         ) {
                             items(filteredAndSortedCards) { card ->
                                 PokemonPantalla(
-                                    pokemonCard = card,
+                                    pokeCard = card,
                                     isAdded = false,
                                     onToggleList = {})
                             }
@@ -425,7 +425,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                             ) {
                                 items(list.cards) { card ->
                                     PokemonPantalla(
-                                        pokemonCard = card,
+                                        pokeCard = card,
                                         isAdded = true,
                                         onToggleList = {
                                             scope.launch {
@@ -448,7 +448,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                                     val inList = list.cards.any { it.id == card.id }
 
                                     PokemonPantalla(
-                                        pokemonCard = card,
+                                        pokeCard = card,
                                         isAdded = inList,
                                         onToggleList = { selected ->
                                             scope.launch {
