@@ -3,7 +3,7 @@ package com.example.poketgc_api
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.poketgc_api.Data.PokemonCard
+import com.example.poketgc_api.Data.PokeCard
 import com.example.poketgc_api.Data.PokemonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,12 +11,12 @@ import kotlinx.coroutines.launch
 
 class PokemonViewModel(private val repository: PokemonRepository) : ViewModel() {
 
-    private val _pokemonCards = MutableStateFlow<List<PokemonCard>>(emptyList())
-    val pokemonCards: StateFlow<List<PokemonCard>> = _pokemonCards
+    private val _pokeCards = MutableStateFlow<List<PokeCard>>(emptyList())
+    val pokeCards: StateFlow<List<PokeCard>> = _pokeCards
 
     init {
         viewModelScope.launch {
-            _pokemonCards.value = repository.getAllCards()
+            _pokeCards.value = repository.getAllCards()
         }
     }
 }

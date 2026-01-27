@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-class SettingsManager(private val context: Context) {
+class ManagerAjustes(private val context: Context) {
     private val IS_DARK_MODE = booleanPreferencesKey("is_dark_mode")
 
     val isDarkMode: Flow<Boolean> = context.dataStore.data.map { preferences ->
