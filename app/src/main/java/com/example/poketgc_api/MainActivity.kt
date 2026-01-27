@@ -27,25 +27,35 @@ import kotlinx.coroutines.launch
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
+/**
+ * Actividad principal de la aplicación PokeTGC API.
+ * Se encarga de inicializar la base de datos, el gestor de preferencias y configurar el tema.
+ */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Inicialización de persistencia: DataStore para ajustes y Room para la base de datos
         val settingsManager = SettingsManager(this)
         val database = AppDatabase.getDatabase(this)
         val dao = database.pokemonDao()
 
         setContent {
+            // Observamos el estado del modo oscuro desde DataStore
             val isDarkMode by settingsManager.isDarkMode.collectAsState(initial = false)
             val scope = rememberCoroutineScope()
 
+            // Aplicamos el tema personalizado (PokeTGC_APITheme) que reacciona al modo oscuro
             PokeTGC_APITheme(darkTheme = isDarkMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    // Lanzamos la aplicación principal pasando los controladores de estado
                     PokemonApp(
                         isDarkMode = isDarkMode,
                         onDarkModeToggle = { enabled ->
+                            // Guardamos la preferencia de modo oscuro de forma asíncrona
                             scope.launch { settingsManager.setDarkMode(enabled) }
                         },
                         dao = dao
@@ -56,11 +66,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Enumeración para controlar la navegación entre las diferentes pantallas.
+ */
 enum class Screen {
     Home, MyLists, ViewList, EditList
 }
 
-// Clase para representar la lista en la UI con sus cartas cargadas
+/**
+ * Clase de ayuda para manejar las listas del usuario en la interfaz.
+ * Vincula una entidad de la base de datos con una lista reactiva de cartas.
+ */
 class UserListUI(
     val entity: UserListEntity,
     val cards: MutableList<PokemonCard> = mutableStateListOf()
@@ -69,17 +85,18 @@ class UserListUI(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: PokemonDao) {
-    var cards by remember { mutableStateOf<List<PokemonCard>>(emptyList()) }
+    // ESTADOS DE DATOS
+    var cards by remember { mutableStateOf<List<PokemonCard>>(emptyList()) } // Cartas descargadas de la API
+    val userLists = remember { mutableStateListOf<UserListUI>() } // Listas del usuario cargadas de Room
+    var activeList by remember { mutableStateOf<UserListUI?>(null) } // Lista seleccionada actualmente
     
-    // Listas cargadas desde Room
-    val userLists = remember { mutableStateListOf<UserListUI>() }
-    var activeList by remember { mutableStateOf<UserListUI?>(null) }
-    
+    // ESTADOS DE UI
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isAscending by remember { mutableStateOf(true) }
     var currentScreen by remember { mutableStateOf(Screen.Home) }
 
+    // ESTADOS DE FILTRO Y BÚSQUEDA
     var searchQuery by remember { mutableStateOf("") }
     var showFilterDialog by remember { mutableStateOf(false) }
     var selectedRarity by remember { mutableStateOf("Todas") }
@@ -91,16 +108,16 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+    // Configuración de Retrofit para conectar con la API de TCGdex
     val retrofit = remember {
         Retrofit.Builder()
             .baseUrl("https://api.tcgdex.net/v2/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }
-
     val api = remember { retrofit.create(TcgDexApi::class.java) }
 
-    // Cargar cartas de la API
+    // EFECTO: Carga inicial de cartas desde la API
     LaunchedEffect(Unit) {
         try {
             cards = api.getAllCard().take(200)
@@ -111,14 +128,14 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         }
     }
 
-    // Cargar listas desde Room al iniciar
+    // EFECTO: Sincronización en tiempo real con la base de datos Room
     LaunchedEffect(Unit) {
         dao.getAllLists().collect { entities ->
             userLists.clear()
             entities.forEach { entity ->
                 val uiList = UserListUI(entity)
                 userLists.add(uiList)
-                // Cargar cartas para esta lista
+                // Cargamos las cartas asociadas a cada lista
                 launch {
                     dao.getCardsForList(entity.id).collect { cardEntities ->
                         uiList.cards.clear()
@@ -131,6 +148,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         }
     }
 
+    // LÓGICA: Filtrado y ordenación de la lista mostrada
     val filteredAndSortedCards = remember(cards, isAscending, searchQuery, selectedRarity, selectedType) {
         cards.filter { card ->
             val matchesSearch = searchQuery.isEmpty() || (card.nombre?.contains(searchQuery, ignoreCase = true) ?: false)
@@ -144,14 +162,11 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         }
     }
 
-    val rarities = remember(cards) {
-        listOf("Todas") + cards.mapNotNull { it.rarity }.distinct().sorted()
-    }
-    
-    val types = remember(cards) {
-        listOf("Todos") + cards.flatMap { it.types ?: emptyList() }.distinct().sorted()
-    }
+    // Listas dinámicas para los filtros
+    val rarities = remember(cards) { listOf("Todas") + cards.mapNotNull { it.rarity }.distinct().sorted() }
+    val types = remember(cards) { listOf("Todos") + cards.flatMap { it.types ?: emptyList() }.distinct().sorted() }
 
+    // DIÁLOGO DE FILTROS
     if (showFilterDialog) {
         AlertDialog(
             onDismissRequest = { showFilterDialog = false },
@@ -179,19 +194,19 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         )
     }
 
+    // DIÁLOGO: Creación de nueva lista
     if (showNewListDialog) {
         AlertDialog(
             onDismissRequest = { showNewListDialog = false },
             title = { Text("Nueva Lista") },
             text = {
-                TextField(value = newListName, onValueChange = { newListName = it }, placeholder = { Text("Nombre") })
+                TextField(value = newListName, onValueChange = { newListName = it }, placeholder = { Text("Nombre de la lista") })
             },
             confirmButton = {
                 Button(onClick = {
                     if (newListName.isNotBlank()) {
                         scope.launch {
-                            val id = dao.insertList(UserListEntity(name = newListName))
-                            // El LaunchedEffect cargará la nueva lista automáticamente
+                            dao.insertList(UserListEntity(name = newListName))
                             newListName = ""
                             showNewListDialog = false
                         }
@@ -202,18 +217,21 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         )
     }
 
+    // MENÚ LATERAL (Navigation Drawer)
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
                 Text("PokeTGC Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
                 HorizontalDivider()
+                // Navegación a Inicio
                 NavigationDrawerItem(
                     label = { Text("Inicio") },
                     selected = currentScreen == Screen.Home,
                     onClick = { currentScreen = Screen.Home; scope.launch { drawerState.close() } },
                     icon = { Icon(Icons.Default.Home, null) }
                 )
+                // Navegación a Mis Listas
                 NavigationDrawerItem(
                     label = { Text("Mis Listas (${userLists.size})") },
                     selected = currentScreen == Screen.MyLists,
@@ -221,6 +239,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                     icon = { Icon(Icons.Default.List, null) }
                 )
                 Spacer(modifier = Modifier.weight(1f))
+                // Interruptor de Modo Oscuro
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode, null)
                     Spacer(modifier = Modifier.width(16.dp))
@@ -236,6 +255,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                 TopAppBar(
                     navigationIcon = {
                         IconButton(onClick = { 
+                            // Control de retroceso según la pantalla actual
                             when (currentScreen) {
                                 Screen.ViewList -> currentScreen = Screen.MyLists
                                 Screen.EditList -> currentScreen = Screen.ViewList
@@ -247,6 +267,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                     },
                     title = { 
                         if (currentScreen == Screen.EditList) {
+                            // Barra de búsqueda en modo edición
                             TextField(value = searchQuery, onValueChange = { searchQuery = it }, placeholder = { Text("Buscar...", color = Color.White.copy(alpha = 0.7f)) }, singleLine = true, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, cursorColor = Color.White, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
                         } else {
                             Text(if (currentScreen == Screen.ViewList) activeList?.entity?.name ?: "Lista" else "PokeTGC API", color = Color.White)
@@ -254,16 +275,19 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF4CAF50)),
                     actions = {
+                        // Filtros y ordenación disponibles en Inicio y Edición
                         if (currentScreen == Screen.Home || currentScreen == Screen.EditList) {
                             IconButton(onClick = { showFilterDialog = true }) { Icon(Icons.Default.FilterList, null, tint = Color.White) }
                             IconButton(onClick = { isAscending = !isAscending }) { Icon(if (isAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward, null, tint = Color.White) }
                         } else if (currentScreen == Screen.ViewList) {
+                            // Botón para entrar en modo edición desde una lista
                             IconButton(onClick = { currentScreen = Screen.EditList }) { Icon(Icons.Default.Add, null, tint = Color.White) }
                         }
                     }
                 )
             },
             floatingActionButton = {
+                // Botón para crear nueva lista (solo en Mis Listas)
                 if (currentScreen == Screen.MyLists) {
                     ExtendedFloatingActionButton(onClick = { showNewListDialog = true }, icon = { Icon(Icons.Default.Create, null) }, text = { Text("Nueva Lista") }, containerColor = Color(0xFF4CAF50), contentColor = Color.White)
                 }
@@ -271,6 +295,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 when (currentScreen) {
+                    // PANTALLA: Inicio (Explorar todas las cartas)
                     Screen.Home -> {
                         if (isLoading) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color(0xFF4CAF50))
                         else LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(8.dp)) {
@@ -279,6 +304,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                             }
                         }
                     }
+                    // PANTALLA: Gestión de Listas (Vista de carpetas)
                     Screen.MyLists -> {
                         LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
                             items(userLists) { list ->
@@ -288,12 +314,14 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                                         Spacer(Modifier.width(16.dp))
                                         Column { Text(list.entity.name); Text("${list.cards.size} cartas", style = MaterialTheme.typography.bodySmall) }
                                         Spacer(Modifier.weight(1f))
+                                        // Borrar lista de la base de datos
                                         IconButton(onClick = { scope.launch { dao.deleteList(list.entity) } }) { Icon(Icons.Default.Delete, null, tint = Color.Gray) }
                                     }
                                 }
                             }
                         }
                     }
+                    // PANTALLA: Visualización de una lista (Contenido guardado)
                     Screen.ViewList -> {
                         activeList?.let { list ->
                             LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(8.dp)) {
@@ -303,6 +331,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                             }
                         }
                     }
+                    // PANTALLA: Edición de lista (Añadir/Quitar cartas de Room)
                     Screen.EditList -> {
                         activeList?.let { list ->
                             LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(8.dp)) {
@@ -311,7 +340,15 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                                     PokemonPantalla(pokemonCard = card, isAdded = inList, onToggleList = { selected ->
                                         scope.launch {
                                             if (inList) dao.deleteCardFromList(list.entity.id, selected.id)
-                                            else dao.insertCard(ListCardEntity(listId = list.entity.id, cardId = selected.id, localId = selected.localId, nombre = selected.nombre, imagen = selected.imagen, rarity = selected.rarity, types = selected.types?.joinToString(",")))
+                                            else dao.insertCard(ListCardEntity(
+                                                listId = list.entity.id, 
+                                                cardId = selected.id, 
+                                                localId = selected.localId, 
+                                                nombre = selected.nombre, 
+                                                imagen = selected.imagen, 
+                                                rarity = selected.rarity, 
+                                                types = selected.types?.joinToString(",")
+                                            ))
                                         }
                                     })
                                 }
