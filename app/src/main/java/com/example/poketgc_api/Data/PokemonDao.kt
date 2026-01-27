@@ -1,19 +1,25 @@
 package com.example.poketgc_api.Data
 
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface PokemonDao {
-    @Query("SELECT * FROM user_lists")
-    fun getAllLists(): Flow<List<UserListEntity>>
+interface PokemonDAO {
+    //Listas
+    @Query("SELECT * FROM user_lists ORDER BY id DESC")
+    fun getAllLists(): Flow<List<UsuarioEntidadLista>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertList(list: UserListEntity): Long
+    @Insert
+    suspend fun insertList(list: UsuarioEntidadLista): Long
 
     @Delete
-    suspend fun deleteList(list: UserListEntity)
+    suspend fun deleteList(list: UsuarioEntidadLista)
 
+    //CARTAS POR LISTA
     @Query("SELECT * FROM list_cards WHERE listId = :listId")
     fun getCardsForList(listId: Long): Flow<List<ListCardEntity>>
 
