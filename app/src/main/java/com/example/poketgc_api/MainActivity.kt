@@ -1,8 +1,11 @@
 package com.example.poketgc_api
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,13 +22,31 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.example.poketgc_api.Data.*
 import com.example.poketgc_api.ui.theme.Pantalla.PokemonPantalla
 import com.example.poketgc_api.ui.theme.PokeTGC_APITheme
 import kotlinx.coroutines.launch
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+
+import android.Manifest
+import android.content.ContentValues
+import android.content.Context
+import android.icu.text.SimpleDateFormat
+import android.provider.MediaStore
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import java.util.Locale
+
 
 /**
  * Actividad principal de la aplicación PokeTGC API.
@@ -70,17 +91,118 @@ class MainActivity : ComponentActivity() {
  * Enumeración para controlar la navegación entre las diferentes pantallas.
  */
 enum class Screen {
-    Home, MyLists, ViewList, EditList
+    Home, MyLists, ViewList, EditList, TakePhoto
 }
 
-/**
- * Clase de ayuda para manejar las listas del usuario en la interfaz.
- * Vincula una entidad de la base de datos con una lista reactiva de cartas.
- */
+
+// Clase para representar la lista en la UI con sus cartas cargadas
 class UserListUI(
     val entity: UserListEntity,
     val cards: MutableList<PokemonCard> = mutableStateListOf()
 )
+
+fun takePhoto(context: Context, imageCapture: ImageCapture) {
+    val name = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        .format(System.currentTimeMillis())
+
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PokeTGC")
+    }
+
+    val outputOptions = ImageCapture.OutputFileOptions
+        .Builder(
+            context.contentResolver,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            contentValues
+        )
+        .build()
+
+    imageCapture.takePicture(
+        outputOptions,
+        ContextCompat.getMainExecutor(context),
+        object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                Toast.makeText(context, "Foto guardada en galería", Toast.LENGTH_SHORT).show()
+            }
+
+            override fun onError(exc: ImageCaptureException) {
+                Toast.makeText(context, "Error al guardar la foto", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+}
+//
+
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun TakePhotoScreen() {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    val cameraPermission = rememberPermissionState(
+        permission = Manifest.permission.CAMERA
+    )
+
+    if (!cameraPermission.status.isGranted) {
+        Column(
+            Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Se necesita permiso para usar la cámara")
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = { cameraPermission.launchPermissionRequest() }) {
+                Text("Permitir cámara")
+            }
+        }
+        return
+    }
+
+    val imageCapture = remember {
+        ImageCapture.Builder().build()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                val previewView = PreviewView(ctx)
+
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
+
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                cameraProviderFuture.addListener({
+                    val cameraProvider = cameraProviderFuture.get()
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        imageCapture
+                    )
+                }, ContextCompat.getMainExecutor(ctx))
+
+                previewView
+            }
+        )
+
+        FloatingActionButton(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(32.dp),
+            onClick = {
+                takePhoto(context, imageCapture)
+            }
+        ) {
+            Icon(Icons.Default.Camera, null)
+        }
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,6 +360,16 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                     onClick = { currentScreen = Screen.MyLists; scope.launch { drawerState.close() } },
                     icon = { Icon(Icons.Default.List, null) }
                 )
+                NavigationDrawerItem(
+                    label = { Text("Tomar foto") },
+                    selected = currentScreen == Screen.TakePhoto,
+                    onClick = {
+                        currentScreen = Screen.TakePhoto
+                        scope.launch { drawerState.close() }
+                    },
+                    icon = { Icon(Icons.Default.PhotoCamera, null) }
+                )
+
                 Spacer(modifier = Modifier.weight(1f))
                 // Interruptor de Modo Oscuro
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -259,10 +391,15 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                             when (currentScreen) {
                                 Screen.ViewList -> currentScreen = Screen.MyLists
                                 Screen.EditList -> currentScreen = Screen.ViewList
+                                Screen.TakePhoto -> currentScreen = Screen.Home
                                 else -> scope.launch { drawerState.open() }
                             }
                         }) {
-                            Icon(if (currentScreen == Screen.ViewList || currentScreen == Screen.EditList) Icons.Default.ArrowBack else Icons.Default.Menu, null, tint = Color.White)
+                            Icon(
+                                if (currentScreen == Screen.ViewList || currentScreen == Screen.EditList || currentScreen == Screen.TakePhoto) Icons.Default.ArrowBack else Icons.Default.Menu,
+                                null,
+                                tint = Color.White
+                            )
                         }
                     },
                     title = { 
@@ -270,7 +407,13 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                             // Barra de búsqueda en modo edición
                             TextField(value = searchQuery, onValueChange = { searchQuery = it }, placeholder = { Text("Buscar...", color = Color.White.copy(alpha = 0.7f)) }, singleLine = true, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, cursorColor = Color.White, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
                         } else {
-                            Text(if (currentScreen == Screen.ViewList) activeList?.entity?.name ?: "Lista" else "PokeTGC API", color = Color.White)
+                            Text(
+                                when (currentScreen) {
+                                    Screen.ViewList -> activeList?.entity?.name ?: "Lista"
+                                    Screen.TakePhoto -> "Tomar Foto"
+                                    else -> "PokeTGC API"
+                                }, color = Color.White
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF4CAF50)),
@@ -354,6 +497,9 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                                 }
                             }
                         }
+                    }
+                    Screen.TakePhoto -> {
+                        TakePhotoScreen()
                     }
                 }
             }
