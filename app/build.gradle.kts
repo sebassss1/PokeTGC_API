@@ -49,7 +49,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    
+
+    //cameraX
+    implementation("androidx.camera:camera-camera2:1.3.2")
+    implementation("androidx.camera:camera-lifecycle:1.3.2")
+    implementation("androidx.camera:camera-view:1.3.2")
+
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+
+
+
     // Material Icons Extended
     implementation("androidx.compose.material:material-icons-extended")
     
