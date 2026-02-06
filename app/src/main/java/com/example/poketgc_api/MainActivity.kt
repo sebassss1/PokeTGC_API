@@ -121,7 +121,7 @@ fun takePhoto(context: Context, imageCapture: ImageCapture) {
         }
     )
 }
-
+//
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
