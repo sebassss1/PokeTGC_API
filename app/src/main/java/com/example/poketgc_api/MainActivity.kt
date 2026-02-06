@@ -1,6 +1,5 @@
 package com.example.poketgc_api
 
-import com.example.poketgc_api.Data.UsuarioEntidadLista
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -49,26 +48,36 @@ import com.google.accompanist.permissions.rememberPermissionState
 import java.util.Locale
 
 
+/**
+ * Actividad principal de la aplicación PokeTGC API.
+ * Se encarga de inicializar la base de datos, el gestor de preferencias y configurar el tema.
+ */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val managerAjustes = ManagerAjustes(this)
+        
+        // Inicialización de persistencia: DataStore para ajustes y Room para la base de datos
+        val settingsManager = SettingsManager(this)
         val database = AppDatabase.getDatabase(this)
         val dao = database.pokemonDao()
 
         setContent {
-            val isDarkMode by managerAjustes.isDarkMode.collectAsState(initial = false)
+            // Observamos el estado del modo oscuro desde DataStore
+            val isDarkMode by settingsManager.isDarkMode.collectAsState(initial = false)
             val scope = rememberCoroutineScope()
 
+            // Aplicamos el tema personalizado (PokeTGC_APITheme) que reacciona al modo oscuro
             PokeTGC_APITheme(darkTheme = isDarkMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    // Lanzamos la aplicación principal pasando los controladores de estado
                     PokemonApp(
                         isDarkMode = isDarkMode,
                         onDarkModeToggle = { enabled ->
-                            scope.launch { managerAjustes.setDarkMode(enabled) }
+                            // Guardamos la preferencia de modo oscuro de forma asíncrona
+                            scope.launch { settingsManager.setDarkMode(enabled) }
                         },
                         dao = dao
                     )
@@ -78,6 +87,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Enumeración para controlar la navegación entre las diferentes pantallas.
+ */
 enum class Screen {
     Home, MyLists, ViewList, EditList, TakePhoto
 }
@@ -85,8 +97,8 @@ enum class Screen {
 
 // Clase para representar la lista en la UI con sus cartas cargadas
 class UserListUI(
-    val entity: UsuarioEntidadLista,
-    val cards: MutableList<PokeCard> = mutableStateListOf()
+    val entity: UserListEntity,
+    val cards: MutableList<PokemonCard> = mutableStateListOf()
 )
 
 fun takePhoto(context: Context, imageCapture: ImageCapture) {
@@ -194,39 +206,40 @@ fun TakePhotoScreen() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: PokemonDAO) {
-    var cards by remember { mutableStateOf<List<PokeCard>>(emptyList()) }
-
-    // Listas cargadas desde Room
-    val userLists = remember { mutableStateListOf<UserListUI>() }
-    var activeList by remember { mutableStateOf<UserListUI?>(null) }
-
+fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: PokemonDao) {
+    // ESTADOS DE DATOS
+    var cards by remember { mutableStateOf<List<PokemonCard>>(emptyList()) } // Cartas descargadas de la API
+    val userLists = remember { mutableStateListOf<UserListUI>() } // Listas del usuario cargadas de Room
+    var activeList by remember { mutableStateOf<UserListUI?>(null) } // Lista seleccionada actualmente
+    
+    // ESTADOS DE UI
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isAscending by remember { mutableStateOf(true) }
     var currentScreen by remember { mutableStateOf(Screen.Home) }
 
+    // ESTADOS DE FILTRO Y BÚSQUEDA
     var searchQuery by remember { mutableStateOf("") }
     var showFilterDialog by remember { mutableStateOf(false) }
     var selectedRarity by remember { mutableStateOf("Todas") }
     var selectedType by remember { mutableStateOf("Todos") }
-
+    
     var showNewListDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+    // Configuración de Retrofit para conectar con la API de TCGdex
     val retrofit = remember {
         Retrofit.Builder()
             .baseUrl("https://api.tcgdex.net/v2/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }
-
     val api = remember { retrofit.create(TcgDexApi::class.java) }
 
-    // Cargar cartas de la API
+    // EFECTO: Carga inicial de cartas desde la API
     LaunchedEffect(Unit) {
         try {
             cards = api.getAllCard().take(200)
@@ -237,26 +250,19 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         }
     }
 
-    // Cargar listas desde Room al iniciar
+    // EFECTO: Sincronización en tiempo real con la base de datos Room
     LaunchedEffect(Unit) {
         dao.getAllLists().collect { entities ->
             userLists.clear()
             entities.forEach { entity ->
                 val uiList = UserListUI(entity)
                 userLists.add(uiList)
-                // Cargar cartas para esta lista
+                // Cargamos las cartas asociadas a cada lista
                 launch {
                     dao.getCardsForList(entity.id).collect { cardEntities ->
                         uiList.cards.clear()
                         uiList.cards.addAll(cardEntities.map {
-                            PokeCard(
-                                it.cardId,
-                                it.localId,
-                                it.nombre,
-                                it.imagen,
-                                it.rarity,
-                                it.types?.split(",")
-                            )
+                            PokemonCard(it.cardId, it.localId, it.nombre, it.imagen, it.rarity, it.types?.split(","))
                         })
                     }
                 }
@@ -264,31 +270,25 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
         }
     }
 
-    val filteredAndSortedCards =
-        remember(cards, isAscending, searchQuery, selectedRarity, selectedType) {
-            cards.filter { card ->
-                val matchesSearch =
-                    searchQuery.isEmpty() || (card.nombre?.contains(searchQuery, ignoreCase = true)
-                        ?: false)
-                val matchesRarity = selectedRarity == "Todas" || card.rarity == selectedRarity
-                val matchesType =
-                    selectedType == "Todos" || (card.types?.contains(selectedType) ?: false)
-                val isNotUnown = card.nombre != "Unown" && !card.imagen.isNullOrEmpty()
-                matchesSearch && matchesRarity && matchesType && isNotUnown
-            }.let { list ->
-                if (isAscending) list.sortedBy { it.localId }
-                else list.sortedByDescending { it.localId }
-            }
+    // LÓGICA: Filtrado y ordenación de la lista mostrada
+    val filteredAndSortedCards = remember(cards, isAscending, searchQuery, selectedRarity, selectedType) {
+        cards.filter { card ->
+            val matchesSearch = searchQuery.isEmpty() || (card.nombre?.contains(searchQuery, ignoreCase = true) ?: false)
+            val matchesRarity = selectedRarity == "Todas" || card.rarity == selectedRarity
+            val matchesType = selectedType == "Todos" || (card.types?.contains(selectedType) ?: false)
+            val isNotUnown = card.nombre != "Unown" && !card.imagen.isNullOrEmpty()
+            matchesSearch && matchesRarity && matchesType && isNotUnown
+        }.let { list ->
+            if (isAscending) list.sortedBy { it.localId }
+            else list.sortedByDescending { it.localId }
         }
-
-    val rarities = remember(cards) {
-        listOf("Todas") + cards.mapNotNull { it.rarity }.distinct().sorted()
     }
 
-    val types = remember(cards) {
-        listOf("Todos") + cards.flatMap { it.types ?: emptyList() }.distinct().sorted()
-    }
+    // Listas dinámicas para los filtros
+    val rarities = remember(cards) { listOf("Todas") + cards.mapNotNull { it.rarity }.distinct().sorted() }
+    val types = remember(cards) { listOf("Todos") + cards.flatMap { it.types ?: emptyList() }.distinct().sorted() }
 
+    // DIÁLOGO DE FILTROS
     if (showFilterDialog) {
         AlertDialog(
             onDismissRequest = { showFilterDialog = false },
@@ -297,93 +297,67 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text("Rareza", style = MaterialTheme.typography.titleSmall)
                     rarities.forEach { rarity ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectedRarity = rarity }) {
-                            RadioButton(
-                                selected = selectedRarity == rarity,
-                                onClick = { selectedRarity = rarity })
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { selectedRarity = rarity }) {
+                            RadioButton(selected = selectedRarity == rarity, onClick = { selectedRarity = rarity })
                             Text(rarity)
                         }
                     }
                     Spacer(Modifier.height(16.dp))
                     Text("Tipo", style = MaterialTheme.typography.titleSmall)
                     types.forEach { type ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectedType = type }) {
-                            RadioButton(
-                                selected = selectedType == type,
-                                onClick = { selectedType = type })
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { selectedType = type }) {
+                            RadioButton(selected = selectedType == type, onClick = { selectedType = type })
                             Text(type)
                         }
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    showFilterDialog = false
-                }) { Text("Aceptar") }
-            }
+            confirmButton = { TextButton(onClick = { showFilterDialog = false }) { Text("Aceptar") } }
         )
     }
 
+    // DIÁLOGO: Creación de nueva lista
     if (showNewListDialog) {
         AlertDialog(
             onDismissRequest = { showNewListDialog = false },
             title = { Text("Nueva Lista") },
             text = {
-                TextField(
-                    value = newListName,
-                    onValueChange = { newListName = it },
-                    placeholder = { Text("Nombre") })
+                TextField(value = newListName, onValueChange = { newListName = it }, placeholder = { Text("Nombre de la lista") })
             },
             confirmButton = {
                 Button(onClick = {
                     if (newListName.isNotBlank()) {
                         scope.launch {
-                            val id = dao.insertList(UsuarioEntidadLista(name = newListName))
-                            // El LaunchedEffect cargará la nueva lista automáticamente
+                            dao.insertList(UserListEntity(name = newListName))
                             newListName = ""
                             showNewListDialog = false
                         }
                     }
                 }) { Text("Crear") }
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    showNewListDialog = false
-                }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showNewListDialog = false }) { Text("Cancelar") } }
         )
     }
 
+    // MENÚ LATERAL (Navigation Drawer)
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Text(
-                    "PokeTGC Menu",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge
-                )
+                Text("PokeTGC Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
                 HorizontalDivider()
+                // Navegación a Inicio
                 NavigationDrawerItem(
                     label = { Text("Inicio") },
                     selected = currentScreen == Screen.Home,
                     onClick = { currentScreen = Screen.Home; scope.launch { drawerState.close() } },
                     icon = { Icon(Icons.Default.Home, null) }
                 )
+                // Navegación a Mis Listas
                 NavigationDrawerItem(
                     label = { Text("Mis Listas (${userLists.size})") },
                     selected = currentScreen == Screen.MyLists,
-                    onClick = {
-                        currentScreen = Screen.MyLists; scope.launch { drawerState.close() }
-                    },
+                    onClick = { currentScreen = Screen.MyLists; scope.launch { drawerState.close() } },
                     icon = { Icon(Icons.Default.List, null) }
                 )
                 NavigationDrawerItem(
@@ -397,12 +371,8 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                // Interruptor de Modo Oscuro
+                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode, null)
                     Spacer(modifier = Modifier.width(16.dp))
                     Text("Modo Oscuro")
@@ -416,7 +386,8 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
             topBar = {
                 TopAppBar(
                     navigationIcon = {
-                        IconButton(onClick = {
+                        IconButton(onClick = { 
+                            // Control de retroceso según la pantalla actual
                             when (currentScreen) {
                                 Screen.ViewList -> currentScreen = Screen.MyLists
                                 Screen.EditList -> currentScreen = Screen.ViewList
@@ -431,26 +402,10 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                             )
                         }
                     },
-                    title = {
+                    title = { 
                         if (currentScreen == Screen.EditList) {
-                            TextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                placeholder = {
-                                    Text(
-                                        "Buscar...",
-                                        color = Color.White.copy(alpha = 0.7f)
-                                    )
-                                },
-                                singleLine = true,
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    cursorColor = Color.White,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
+                            // Barra de búsqueda en modo edición
+                            TextField(value = searchQuery, onValueChange = { searchQuery = it }, placeholder = { Text("Buscar...", color = Color.White.copy(alpha = 0.7f)) }, singleLine = true, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, cursorColor = Color.White, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
                         } else {
                             Text(
                                 when (currentScreen) {
@@ -463,164 +418,84 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF4CAF50)),
                     actions = {
+                        // Filtros y ordenación disponibles en Inicio y Edición
                         if (currentScreen == Screen.Home || currentScreen == Screen.EditList) {
-                            IconButton(onClick = {
-                                showFilterDialog = true
-                            }) { Icon(Icons.Default.FilterList, null, tint = Color.White) }
-                            IconButton(onClick = {
-                                isAscending = !isAscending
-                            }) {
-                                Icon(
-                                    if (isAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                                    null,
-                                    tint = Color.White
-                                )
-                            }
+                            IconButton(onClick = { showFilterDialog = true }) { Icon(Icons.Default.FilterList, null, tint = Color.White) }
+                            IconButton(onClick = { isAscending = !isAscending }) { Icon(if (isAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward, null, tint = Color.White) }
                         } else if (currentScreen == Screen.ViewList) {
-                            IconButton(onClick = {
-                                currentScreen = Screen.EditList
-                            }) { Icon(Icons.Default.Add, null, tint = Color.White) }
+                            // Botón para entrar en modo edición desde una lista
+                            IconButton(onClick = { currentScreen = Screen.EditList }) { Icon(Icons.Default.Add, null, tint = Color.White) }
                         }
                     }
                 )
             },
             floatingActionButton = {
+                // Botón para crear nueva lista (solo en Mis Listas)
                 if (currentScreen == Screen.MyLists) {
-                    ExtendedFloatingActionButton(
-                        onClick = { showNewListDialog = true },
-                        icon = { Icon(Icons.Default.Create, null) },
-                        text = { Text("Nueva Lista") },
-                        containerColor = Color(0xFF4CAF50),
-                        contentColor = Color.White
-                    )
+                    ExtendedFloatingActionButton(onClick = { showNewListDialog = true }, icon = { Icon(Icons.Default.Create, null) }, text = { Text("Nueva Lista") }, containerColor = Color(0xFF4CAF50), contentColor = Color.White)
                 }
             }
         ) { padding ->
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 when (currentScreen) {
+                    // PANTALLA: Inicio (Explorar todas las cartas)
                     Screen.Home -> {
-                        if (isLoading) CircularProgressIndicator(
-                            Modifier.align(Alignment.Center),
-                            color = Color(0xFF4CAF50)
-                        )
-                        else LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            contentPadding = PaddingValues(8.dp)
-                        ) {
+                        if (isLoading) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color(0xFF4CAF50))
+                        else LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(8.dp)) {
                             items(filteredAndSortedCards) { card ->
-                                PokemonPantalla(
-                                    pokeCard = card,
-                                    isAdded = false,
-                                    onToggleList = {})
+                                PokemonPantalla(pokemonCard = card, isAdded = false, onToggleList = {})
                             }
                         }
                     }
-
+                    // PANTALLA: Gestión de Listas (Vista de carpetas)
                     Screen.MyLists -> {
-                        LazyColumn(Modifier
-                            .fillMaxSize()
-                            .padding(8.dp)) {
+                        LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
                             items(userLists) { list ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clickable {
-                                            activeList = list; currentScreen = Screen.ViewList
-                                        }) {
-                                    Row(
-                                        Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { activeList = list; currentScreen = Screen.ViewList }) {
+                                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Folder, null, tint = Color(0xFF4CAF50))
                                         Spacer(Modifier.width(16.dp))
-                                        Column {
-                                            Text(list.entity.name); Text(
-                                            "${list.cards.size} cartas",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                        }
+                                        Column { Text(list.entity.name); Text("${list.cards.size} cartas", style = MaterialTheme.typography.bodySmall) }
                                         Spacer(Modifier.weight(1f))
-                                        IconButton(onClick = { scope.launch { dao.deleteList(list.entity) } }) {
-                                            Icon(
-                                                Icons.Default.Delete,
-                                                null,
-                                                tint = Color.Gray
-                                            )
-                                        }
+                                        // Borrar lista de la base de datos
+                                        IconButton(onClick = { scope.launch { dao.deleteList(list.entity) } }) { Icon(Icons.Default.Delete, null, tint = Color.Gray) }
                                     }
                                 }
                             }
                         }
                     }
-
+                    // PANTALLA: Visualización de una lista (Contenido guardado)
                     Screen.ViewList -> {
                         activeList?.let { list ->
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(2),
-                                contentPadding = PaddingValues(8.dp)
-                            ) {
+                            LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(8.dp)) {
                                 items(list.cards) { card ->
-                                    PokemonPantalla(
-                                        pokeCard = card,
-                                        isAdded = true,
-                                        onToggleList = {
-                                            scope.launch {
-                                                val cardId = it.id ?: return@launch
-                                                dao.deleteCardFromList(list.entity.id, cardId)
-                                            }
-                                        })
+                                    PokemonPantalla(pokemonCard = card, isAdded = true, onToggleList = { scope.launch { dao.deleteCardFromList(list.entity.id, it.id) } })
                                 }
                             }
                         }
                     }
-
+                    // PANTALLA: Edición de lista (Añadir/Quitar cartas de Room)
                     Screen.EditList -> {
                         activeList?.let { list ->
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(2),
-                                contentPadding = PaddingValues(8.dp)
-                            ) {
+                            LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(8.dp)) {
                                 items(filteredAndSortedCards) { card ->
                                     val inList = list.cards.any { it.id == card.id }
-
-                                    PokemonPantalla(
-                                        pokeCard = card,
-                                        isAdded = inList,
-                                        onToggleList = { selected ->
-                                            scope.launch {
-                                                // selected es la carta que te llega del componente
-                                                val cardId = selected.id
-                                                if (cardId.isNullOrBlank()) {
-                                                    // Si no hay id, no se puede guardar en Room (porque cardId es clave)
-                                                    return@launch
-                                                }
-
-                                                val listId = list.entity.id
-
-                                                if (inList) {
-                                                    dao.deleteCardFromList(listId, cardId)
-                                                } else {
-                                                    dao.insertCard(
-                                                        ListCardEntity(
-                                                            listId = listId,
-                                                            cardId = cardId,
-                                                            localId = selected.localId,
-                                                            nombre = selected.nombre,
-                                                            imagen = selected.imagen,
-                                                            rarity = selected.rarity,
-                                                            types = selected.types?.joinToString(",")
-                                                        )
-                                                    )
-                                                }
-                                            }
+                                    PokemonPantalla(pokemonCard = card, isAdded = inList, onToggleList = { selected ->
+                                        scope.launch {
+                                            if (inList) dao.deleteCardFromList(list.entity.id, selected.id)
+                                            else dao.insertCard(ListCardEntity(
+                                                listId = list.entity.id, 
+                                                cardId = selected.id, 
+                                                localId = selected.localId, 
+                                                nombre = selected.nombre, 
+                                                imagen = selected.imagen, 
+                                                rarity = selected.rarity, 
+                                                types = selected.types?.joinToString(",")
+                                            ))
                                         }
-                                    )
+                                    })
                                 }
                             }
-
                         }
                     }
                     Screen.TakePhoto -> {
