@@ -1,6 +1,6 @@
 package com.example.poketgc_api
 
-import com.example.poketgc_api.Data.UsuarioEntidadLista
+import com.example.poketgc_api.Datos.Data.UsuarioEntidadLista
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -26,7 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.example.poketgc_api.Data.*
+import com.example.poketgc_api.Datos.*
 import com.example.poketgc_api.ui.theme.Pantalla.PokemonPantalla
 import com.example.poketgc_api.ui.theme.PokeTGC_APITheme
 import kotlinx.coroutines.launch
@@ -44,6 +44,10 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import com.example.poketgc_api.Datos.DAO.PokemonDAO
+import com.example.poketgc_api.Datos.AppDatabase
+import com.example.poketgc_api.Datos.Data.ListCardEntity
+import com.example.poketgc_api.Datos.Data.PokeCardData
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import java.util.Locale
@@ -86,7 +90,7 @@ enum class Screen {
 // Clase para representar la lista en la UI con sus cartas cargadas
 class UserListUI(
     val entity: UsuarioEntidadLista,
-    val cards: MutableList<PokeCard> = mutableStateListOf()
+    val cards: MutableList<PokeCardData> = mutableStateListOf()
 )
 
 fun takePhoto(context: Context, imageCapture: ImageCapture) {
@@ -195,7 +199,7 @@ fun TakePhotoScreen() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: PokemonDAO) {
-    var cards by remember { mutableStateOf<List<PokeCard>>(emptyList()) }
+    var cards by remember { mutableStateOf<List<PokeCardData>>(emptyList()) }
 
     // Listas cargadas desde Room
     val userLists = remember { mutableStateListOf<UserListUI>() }
@@ -249,7 +253,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                     dao.getCardsForList(entity.id).collect { cardEntities ->
                         uiList.cards.clear()
                         uiList.cards.addAll(cardEntities.map {
-                            PokeCard(
+                            PokeCardData(
                                 it.cardId,
                                 it.localId,
                                 it.nombre,
@@ -511,7 +515,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                         ) {
                             items(filteredAndSortedCards) { card ->
                                 PokemonPantalla(
-                                    pokeCard = card,
+                                    pokeCardData = card,
                                     isAdded = false,
                                     onToggleList = {})
                             }
@@ -564,7 +568,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                             ) {
                                 items(list.cards) { card ->
                                     PokemonPantalla(
-                                        pokeCard = card,
+                                        pokeCardData = card,
                                         isAdded = true,
                                         onToggleList = {
                                             scope.launch {
@@ -587,7 +591,7 @@ fun PokemonApp(isDarkMode: Boolean, onDarkModeToggle: (Boolean) -> Unit, dao: Po
                                     val inList = list.cards.any { it.id == card.id }
 
                                     PokemonPantalla(
-                                        pokeCard = card,
+                                        pokeCardData = card,
                                         isAdded = inList,
                                         onToggleList = { selected ->
                                             scope.launch {

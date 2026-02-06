@@ -32,15 +32,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.poketgc_api.Data.PokeCard
+import com.example.poketgc_api.Datos.Data.PokeCardData
 import com.example.poketgc_api.GuardarCarta
 import kotlinx.coroutines.launch
 
 @Composable
 fun PokemonPantalla(
-    pokeCard: PokeCard,
+    pokeCardData: PokeCardData,
     isAdded: Boolean = false,
-    onToggleList: (PokeCard) -> Unit
+    onToggleList: (PokeCardData) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -59,10 +59,10 @@ fun PokemonPantalla(
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context = LocalContext.current)
-                    .data("${pokeCard.imagen}/high.png")
+                    .data("${pokeCardData.imagen}/high.png")
                     .crossfade(true)
                     .build(),
-                contentDescription = pokeCard.nombre,
+                contentDescription = pokeCardData.nombre,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -75,12 +75,12 @@ fun PokemonPantalla(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = pokeCard.nombre ?: "Nombre desconocido",
+                    text = pokeCardData.nombre ?: "Nombre desconocido",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 
-                IconButton(onClick = { onToggleList(pokeCard) }) {
+                IconButton(onClick = { onToggleList(pokeCardData) }) {
                     Icon(
                         imageVector = if (isAdded) Icons.Default.Delete else Icons.Default.Add,
                         contentDescription = if (isAdded) "Quitar" else "Añadir",
@@ -104,7 +104,7 @@ fun PokemonPantalla(
                             onClick = {
                                 showMenu = false
                                 scope.launch {
-                                    GuardarCarta.savePokemonImage(context, pokeCard)
+                                    GuardarCarta.savePokemonImage(context, pokeCardData)
                                 }
                             }
                         )

@@ -1,4 +1,4 @@
-package com.example.poketgc_api.Data
+package com.example.poketgc_api.Datos
 
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory

@@ -1,8 +1,8 @@
-package com.example.poketgc_api.Data
+package com.example.poketgc_api.Datos.Data
 
 import com.google.gson.annotations.SerializedName
 
-data class PokeCard(
+data class PokeCardData(
     val id: String,
     val localId: String?,
     @SerializedName("name")

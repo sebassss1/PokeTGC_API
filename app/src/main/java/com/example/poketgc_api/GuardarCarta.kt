@@ -11,7 +11,7 @@ import android.widget.Toast
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.example.poketgc_api.Data.PokeCard
+import com.example.poketgc_api.Datos.Data.PokeCardData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -20,8 +20,8 @@ import java.io.OutputStream
 
 object GuardarCarta {
 
-    suspend fun savePokemonImage(context: Context, pokeCard: PokeCard) {
-        val imageUrl = "${pokeCard.imagen}/high.png"
+    suspend fun savePokemonImage(context: Context, pokeCardData: PokeCardData) {
+        val imageUrl = "${pokeCardData.imagen}/high.png"
         val loader = ImageLoader(context)
         val request = ImageRequest.Builder(context)
             .data(imageUrl)
@@ -32,7 +32,7 @@ object GuardarCarta {
         if (result is SuccessResult) {
             val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
             if (bitmap != null) {
-                val fileName = "${pokeCard.nombre?.replace(" ", "_") ?: "pokemon"}_${pokeCard.id}.jpg"
+                val fileName = "${pokeCardData.nombre?.replace(" ", "_") ?: "pokemon"}_${pokeCardData.id}.jpg"
                 val saved = saveBitmapToGallery(context, bitmap, fileName)
                 withContext(Dispatchers.Main) {
                     if (saved) {

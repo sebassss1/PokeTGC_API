@@ -1,9 +1,12 @@
-package com.example.poketgc_api.Data
+package com.example.poketgc_api.Datos
 
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.poketgc_api.Datos.DAO.PokemonDAO
+import com.example.poketgc_api.Datos.Data.ListCardEntity
+import com.example.poketgc_api.Datos.Data.UsuarioEntidadLista
 
 @Database(
     entities = [UsuarioEntidadLista::class, ListCardEntity::class],
